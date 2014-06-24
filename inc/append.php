@@ -5,7 +5,7 @@ if(php_sapi_name() == 'cli')
 	return;
 }
 
-register_shutdown_function(function(){
+//register_shutdown_function(function(){
 	// by registering register_shutdown_function at the end of the file
 	// I make sure that all execution data, including that of the earlier
 	// registered register_shutdown_function, is collected.
@@ -23,4 +23,4 @@ register_shutdown_function(function(){
 	
 	$xhprof_data_obj	= new \ay\xhprof\Data($config['pdo']);
 	$xhprof_data_obj->save($xhprof_data);
-});
+//});
