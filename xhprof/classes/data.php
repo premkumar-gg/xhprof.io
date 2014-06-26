@@ -127,11 +127,38 @@ class Data
 	    return $request;
     }
     
+    protected function _saveRows($tableName, $data) {
+        $vAmount    = count($data);
+        $values     = array();
+        $columns    = array();
+
+        foreach ($data as $colval) {
+            foreach ($colval as $column=>$value) {
+                array_push($values,$value);
+                !in_array($column,$columns) ? array_push($columns,$column) : null;
+            }
+        }
+
+        $cAmount    = count($columns);
+        $values     = array_chunk($values, $cAmount);
+        $iValues    = '';
+        $iColumns   = implode("`, `", $columns);
+
+        for($i=0; $i<$vAmount;$i++)
+            $iValues.="('".implode("', '", $values[$i])."')".(($i+1)!=$vAmount ? ',' : null);
+
+        $data="INSERT INTO `". $tableName ."` (`".$iColumns."`) VALUES ".$iValues;
+        //die($data); 
+        $this->getAdapter()->query($data);
+    }
+    
 	/**
 	 * @param	array	$xhprof_data	The raw XHProf data.
 	 */
 	public function save(array $xhprof_data)
 	{
+            $this->_saveRows('calls_staging', $xhprof_data);
+            
 		if(!isset($_SERVER['HTTP_HOST'], $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']))
 		{
 			throw new DataException('XHProf.io cannot function in a server environment that does not define REQUEST_METHOD, HTTP_HOST or REQUEST_URI.');

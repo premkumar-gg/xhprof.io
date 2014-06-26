@@ -1,3 +1,4 @@
 xhprof/includes/config.inc.php
 *.custom.php
 /nbproject/private/
+/nbproject
