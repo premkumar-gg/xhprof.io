@@ -152,28 +152,17 @@ class Data
         $this->getAdapter()->query($data);
     }
     
-    /**
-     * @param	array	$xhprof_data	The raw XHProf data.
-     */
-    public function save(array $xhprof_data)
-    {
-        if(!isset($_SERVER['HTTP_HOST'], $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']))
-        {
-                throw new DataException('XHProf.io cannot function in a server environment that does not define REQUEST_METHOD, HTTP_HOST or REQUEST_URI.');
-        }
-        
-        $this->_saveRows('calls_staging', $xhprof_data);
-
-        $sth	= $this->db->prepare("
+    protected function _getRequestId() {
+        $exReqParamsQry	= $this->db->prepare("
                 (SELECT 'method_id', `id` FROM `request_methods` WHERE `method` = :method LIMIT 1)
                 UNION ALL
                 (SELECT 'host_id', `id` FROM `request_hosts` WHERE `host` = :host LIMIT 1)
                 UNION ALL
                 (SELECT 'uri_id', `id` FROM `request_uris` WHERE `uri` = :uri LIMIT 1);");
 
-        $sth->execute(array('method' => $_SERVER['REQUEST_METHOD'], 'host' => $_SERVER['HTTP_HOST'], 'uri' => $_SERVER['REQUEST_URI']));
+        $exReqParamsQry->execute(array('method' => $_SERVER['REQUEST_METHOD'], 'host' => $_SERVER['HTTP_HOST'], 'uri' => $_SERVER['REQUEST_URI']));
 
-        $request	= $sth->fetchAll(PDO::FETCH_KEY_PAIR);
+        $request	= $exReqParamsQry->fetchAll(PDO::FETCH_KEY_PAIR);
 
         if(!isset($request['method_id']))
         {
@@ -202,17 +191,35 @@ class Data
                 $request['uri_id']		= $this->db->lastInsertId();
         }
 
-        $sth	= $this->db->prepare("INSERT INTO `requests` SET `request_host_id` = :request_host_id, `request_uri_id` = :request_uri_id, `request_method_id` = :request_method_id, `https` = :https;");
+        $insReqQry	= $this->db->prepare("INSERT INTO `requests` SET `request_host_id` = :request_host_id, `request_uri_id` = :request_uri_id, `request_method_id` = :request_method_id, `https` = :https;");
 
-        $sth->bindValue(':request_host_id', $request['host_id'], PDO::PARAM_INT);
-        $sth->bindValue(':request_uri_id', $request['uri_id'], PDO::PARAM_INT);
-        $sth->bindValue(':request_method_id', $request['method_id'], PDO::PARAM_INT);
-        $sth->bindValue(':https', empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == 'off' ? 0 : 1, PDO::PARAM_INT);
+        $insReqQry->bindValue(':request_host_id', $request['host_id'], PDO::PARAM_INT);
+        $insReqQry->bindValue(':request_uri_id', $request['uri_id'], PDO::PARAM_INT);
+        $insReqQry->bindValue(':request_method_id', $request['method_id'], PDO::PARAM_INT);
+        $insReqQry->bindValue(':https', empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == 'off' ? 0 : 1, PDO::PARAM_INT);
 
-        $sth->execute();
+        $insReqQry->execute();
 
         $request_id	= $this->db->lastInsertId();
-
+        
+        return $request_id;
+    }
+    
+    /**
+     * @param	array	$xhprof_data	The raw XHProf data.
+     */
+    public function save(array $xhprof_data)
+    {
+        if(!isset($_SERVER['HTTP_HOST'], $_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']))
+        {
+            throw new DataException('XHProf.io cannot function in a server environment that does not define REQUEST_METHOD, HTTP_HOST or REQUEST_URI.');
+        }
+        
+        $requestId = $this->_getRequestId();
+        $this->_saveRows('calls_staging', $xhprof_data);
+        return $requestId;
+        
+        /*
         $sth1		= $this->db->prepare("INSERT INTO `calls` SET `request_id` = :request_id, `ct` = :ct, `wt` = :wt, `cpu` = :cpu, `mu` = :mu, `pmu` = :pmu, `caller_id` = :caller_id, `callee_id` = :callee_id;");
         $sth2		= $this->db->prepare("SELECT `id` FROM `players` WHERE `name` = :name LIMIT 1;");
         $sth3		= $this->db->prepare("INSERT INTO `players` SET `name` = :name;");
@@ -295,6 +302,7 @@ class Data
         }
 
         return $request_id;
+         * */
     }
 
     public function getHosts(array $query = NULL)
