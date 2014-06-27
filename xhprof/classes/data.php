@@ -148,8 +148,9 @@ class Data
             $iValues.="('".implode("', '", $values[$i])."')".(($i+1)!=$vAmount ? ',' : null);
 
         $data="INSERT INTO `". $tableName ."` (`".$iColumns."`) VALUES ".$iValues;
-        //die($data); 
-        $this->getAdapter()->query($data);
+        
+        $insQryStmt = $this->db->prepare($data);
+        $insQryStmt->execute();
     }
     
     protected function _getRequestId() {
@@ -216,8 +217,32 @@ class Data
         }
         
         $requestId = $this->_getRequestId();
+        
+        foreach($xhprof_data as $call => &$data)
+        {
+            $data['request_id'] = $requestId;
+            $call = explode('==>', $call);
+            
+            $calleeName = '';
+            $callerName = '';
+            
+            if(count($call) == 1) {
+                $calleeName = $call[0];
+            } else {
+                $callerName = $call[0];
+                $calleeName = $call[1];
+            }
+            
+            $data['caller'] = $callerName;
+            $data['callee'] = $calleeName;
+        }
+        
         $this->_saveRows('calls_staging', $xhprof_data);
-        return $requestId;
+        $stmt = $this->db->prepare("CALL usp_xhprof_callsStagingToMain(?)");
+        $stmt->bindParam(1, $requestId, PDO::PARAM_INT, 10);
+        $stmt->execute();
+        
+        return $requestId; 
         
         /*
         $sth1		= $this->db->prepare("INSERT INTO `calls` SET `request_id` = :request_id, `ct` = :ct, `wt` = :wt, `cpu` = :cpu, `mu` = :mu, `pmu` = :pmu, `caller_id` = :caller_id, `callee_id` = :callee_id;");

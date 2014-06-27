@@ -23,6 +23,10 @@
 # Dump of table calls
 # ------------------------------------------------------------
 
+CREATE DATABASE `sch_xhprof`;
+
+USE `sch_xhprof`;
+
 DROP TABLE IF EXISTS `calls`;
 
 CREATE TABLE `calls` (
@@ -138,6 +142,33 @@ CREATE TABLE `requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 
+DELIMITER $$
+CREATE PROCEDURE `usp_xhprof_callsStagingToMain`(requestId INT)
+BEGIN
+	INSERT INTO players (`name`)
+	SELECT caller
+	FROM sch_xhprof.calls_staging AS cs
+		LEFT JOIN sch_xhprof.players AS p
+			ON IFNULL(cs.caller, '') = p.`name`
+	WHERE p.`name` IS NULL;
+
+	INSERT INTO players (`name`)
+	SELECT callee
+	FROM sch_xhprof.calls_staging AS cs
+		LEFT JOIN sch_xhprof.players AS p
+			ON IFNULL(cs.callee, '') = p.`name`
+	WHERE p.`name` IS NULL;
+
+	INSERT INTO calls (request_id, ct, wt, `cpu`, mu, pmu, caller_id, callee_id)
+	SELECT request_id, ct, wt, `cpu`, mu, pmu, 
+			callerMap.id AS callerId, calleeMap.id AS calleeId
+	FROM sch_xhprof.calls_staging AS stg
+		JOIN players AS callerMap 
+			ON IFNULL(stg.caller, '') = callerMap.`name`
+		JOIN players AS calleeMap
+			ON IFNULL(stg.callee, '') = caleeMap.`name`;
+END$$
+DELIMITER ;
 
 
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
