@@ -145,28 +145,48 @@ CREATE TABLE `requests` (
 DELIMITER $$
 CREATE PROCEDURE `usp_xhprof_callsStagingToMain`(requestId INT)
 BEGIN
+	DECLARE callId INT(10);
+
 	INSERT INTO players (`name`)
 	SELECT caller
 	FROM sch_xhprof.calls_staging AS cs
 		LEFT JOIN sch_xhprof.players AS p
 			ON IFNULL(cs.caller, '') = p.`name`
-	WHERE p.`name` IS NULL;
+	WHERE p.`name` IS NULL 
+		AND IFNULL(cs.caller, '') <> ''
+		AND cs.request_id = requestId
+	GROUP BY caller;
 
 	INSERT INTO players (`name`)
 	SELECT callee
 	FROM sch_xhprof.calls_staging AS cs
 		LEFT JOIN sch_xhprof.players AS p
 			ON IFNULL(cs.callee, '') = p.`name`
-	WHERE p.`name` IS NULL;
+	WHERE p.`name` IS NULL
+		AND IFNULL(cs.caller, '') <> ''
+		AND cs.request_id = requestId
+	GROUP BY callee;
 
 	INSERT INTO calls (request_id, ct, wt, `cpu`, mu, pmu, caller_id, callee_id)
 	SELECT request_id, ct, wt, `cpu`, mu, pmu, 
 			callerMap.id AS callerId, calleeMap.id AS calleeId
 	FROM sch_xhprof.calls_staging AS stg
-		JOIN players AS callerMap 
+		LEFT JOIN players AS callerMap 
 			ON IFNULL(stg.caller, '') = callerMap.`name`
 		JOIN players AS calleeMap
-			ON IFNULL(stg.callee, '') = caleeMap.`name`;
+			ON IFNULL(stg.callee, '') = calleeMap.`name`
+	WHERE stg.request_id = requestId;
+
+	SELECT id INTO callId
+	FROM sch_xhprof.calls
+	WHERE caller_id IS null
+		AND request_id = requestId
+	ORDER BY id desc
+	LIMIT 1;
+
+	UPDATE sch_xhprof.requests 
+	SET request_caller_id = callId
+	WHERE id = requestId;
 END$$
 DELIMITER ;
 
