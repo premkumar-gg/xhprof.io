@@ -23,28 +23,9 @@
 # Dump of table calls
 # ------------------------------------------------------------
 
-CREATE DATABASE `sch_xhprof`;
+CREATE DATABASE `xhprof`;
 
-USE `sch_xhprof`;
-
-DROP TABLE IF EXISTS `calls`;
-
-CREATE TABLE `calls` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `request_id` int(10) unsigned NOT NULL,
-  `ct` int(10) unsigned DEFAULT NULL,
-  `wt` int(10) unsigned DEFAULT NULL,
-  `cpu` int(10) unsigned DEFAULT NULL,
-  `mu` int(10) unsigned DEFAULT NULL,
-  `pmu` int(10) unsigned DEFAULT NULL,
-  `caller_id` int(10) unsigned DEFAULT NULL,
-  `callee_id` int(10) unsigned NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `request_id` (`request_id`),
-  CONSTRAINT `calls_ibfk_1` FOREIGN KEY (`request_id`) REFERENCES `requests` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-
+USE `xhprof`;
 
 # Dump of table players
 # ------------------------------------------------------------
@@ -141,6 +122,35 @@ CREATE TABLE `requests` (
   CONSTRAINT `requests_ibfk_5` FOREIGN KEY (`request_uri_id`) REFERENCES `request_uris` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+DROP TABLE IF EXISTS `calls_staging`;
+
+CREATE TABLE `calls_staging` (
+  `request_id` int(10) unsigned NOT NULL,
+  `ct` int(10) unsigned DEFAULT NULL,
+  `wt` int(10) unsigned DEFAULT NULL,
+  `cpu` int(10) unsigned DEFAULT NULL,
+  `mu` int(10) unsigned DEFAULT NULL,
+  `pmu` int(10) unsigned DEFAULT NULL,
+  `caller` varchar(250) DEFAULT NULL,
+  `callee` varchar(250) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+DROP TABLE IF EXISTS `calls`;
+
+CREATE TABLE `calls` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `request_id` int(10) unsigned NOT NULL,
+  `ct` int(10) unsigned DEFAULT NULL,
+  `wt` int(10) unsigned DEFAULT NULL,
+  `cpu` int(10) unsigned DEFAULT NULL,
+  `mu` int(10) unsigned DEFAULT NULL,
+  `pmu` int(10) unsigned DEFAULT NULL,
+  `caller_id` int(10) unsigned DEFAULT NULL,
+  `callee_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `request_id` (`request_id`),
+  CONSTRAINT `calls_ibfk_1` FOREIGN KEY (`request_id`) REFERENCES `requests` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 DELIMITER $$
 CREATE PROCEDURE `usp_xhprof_callsStagingToMain`(requestId INT)
@@ -190,10 +200,56 @@ BEGIN
 END$$
 DELIMITER ;
 
+DELIMITER $$
+CREATE PROCEDURE `usp_xhprof_request_ins`(
+    requestMethod varchar(10),
+    httpHost varchar(255),
+    requestUri varchar(255),
+    isHttps int(1)
+)
+BEGIN
+    DECLARE requestMethodId int(10);
+    DECLARE httpHostId int(10);
+    DECLARE requestUriId int(10);
+    DECLARE requestId int(10);
 
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
-/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
-/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+    SELECT id INTO requestMethodId
+    FROM request_methods
+    WHERE method = requestMethod;
+
+    SELECT id INTO httpHostId
+    FROM request_hosts
+    WHERE `host` = httpHost;
+
+    SELECT id INTO requestUriId
+    FROM request_uris
+    WHERE uri = requestUri;
+
+    IF requestMethodId IS NULL THEN
+        INSERT INTO request_methods SET method = requestMethod;
+        SELECT LAST_INSERT_ID() INTO requestMethodId;
+    END IF;
+
+    IF httpHostId IS NULL THEN
+        INSERT INTO request_hosts SET `host` = httpHost;
+        SELECT LAST_INSERT_ID() INTO httpHostId;
+    END IF;
+
+    IF requestUriId IS NULL THEN
+        INSERT INTO request_uris SET uri = requestUri;
+        SELECT LAST_INSERT_ID() INTO requestUriId;
+    END IF;
+
+    IF requestMethodId IS NOT NULL AND httpHostId IS NOT NULL AND requestUriId IS NOT NULL THEN
+        INSERT INTO requests
+            SET request_host_id = httpHostId, 
+                request_uri_id = requestUriId, 
+                request_method_id = requestMethodId, 
+                `https` = isHttps;
+        
+        SELECT LAST_INSERT_ID() INTO requestId;
+    END IF;
+
+	SELECT requestId AS newRequestId;
+END$$
+DELIMITER ;

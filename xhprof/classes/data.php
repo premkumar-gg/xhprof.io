@@ -154,56 +154,25 @@ class Data
     }
     
     protected function _getRequestId() {
-        $exReqParamsQry	= $this->db->prepare("
-                (SELECT 'method_id', `id` FROM `request_methods` WHERE `method` = :method LIMIT 1)
-                UNION ALL
-                (SELECT 'host_id', `id` FROM `request_hosts` WHERE `host` = :host LIMIT 1)
-                UNION ALL
-                (SELECT 'uri_id', `id` FROM `request_uris` WHERE `uri` = :uri LIMIT 1);");
-
-        $exReqParamsQry->execute(array('method' => $_SERVER['REQUEST_METHOD'], 'host' => $_SERVER['HTTP_HOST'], 'uri' => $_SERVER['REQUEST_URI']));
-
-        $request	= $exReqParamsQry->fetchAll(PDO::FETCH_KEY_PAIR);
-
-        if(!isset($request['method_id']))
-        {
-                $this->db
-                        ->prepare("INSERT INTO `request_methods` SET `method` = :method;")
-                        ->execute(array('method' => $_SERVER['REQUEST_METHOD']));
-
-                $request['method_id']	= $this->db->lastInsertId();
-        }
-
-        if(!isset($request['host_id']))
-        {
-                $this->db
-                        ->prepare("INSERT INTO `request_hosts` SET `host` = :host;")
-                        ->execute(array('host' => $_SERVER['HTTP_HOST']));
-
-                $request['host_id']		= $this->db->lastInsertId();
-        }
-
-        if(!isset($request['uri_id']))
-        {
-                $this->db
-                        ->prepare("INSERT INTO `request_uris` SET `uri` = :uri;")
-                        ->execute(array('uri' => $_SERVER['REQUEST_URI']));
-
-                $request['uri_id']		= $this->db->lastInsertId();
-        }
-
-        $insReqQry	= $this->db->prepare("INSERT INTO `requests` SET `request_host_id` = :request_host_id, `request_uri_id` = :request_uri_id, `request_method_id` = :request_method_id, `https` = :https;");
-
-        $insReqQry->bindValue(':request_host_id', $request['host_id'], PDO::PARAM_INT);
-        $insReqQry->bindValue(':request_uri_id', $request['uri_id'], PDO::PARAM_INT);
-        $insReqQry->bindValue(':request_method_id', $request['method_id'], PDO::PARAM_INT);
-        $insReqQry->bindValue(':https', empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == 'off' ? 0 : 1, PDO::PARAM_INT);
-
-        $insReqQry->execute();
-
-        $request_id	= $this->db->lastInsertId();
+        $requestId = null;
         
-        return $request_id;
+        $stmt = $this->db->prepare("CALL usp_xhprof_request_ins(:method,:host,:uri,:isHttps)");
+        
+        $ret = $stmt->execute(array(
+            'method' => $_SERVER['REQUEST_METHOD'], 
+            'host' => $_SERVER['HTTP_HOST'], 
+            'uri' => $_SERVER['REQUEST_URI'],
+            'isHttps' => empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] == 'off' ? 0 : 1
+        ));
+        
+        $ret = $stmt->fetch(PDO::FETCH_ASSOC);
+        $requestId = null;
+        
+        if ($ret !== NULL && count($ret) > 0) {
+            $requestId = $ret['newRequestId'];
+        }
+        
+        return $requestId;
     }
     
     /**
